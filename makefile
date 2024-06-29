@@ -2,9 +2,8 @@ CC := gcc
 
 SOURCE := ./src
 DIST := ./dist
-INCLUDE := ./include
 
-FLAGS := -Wall -O0 -march=native -I$(INCLUDE)
+FLAGS := -Wall -O0 -march=native
 LIBS := -lm
 
 OBJECTS := $(DIST)/main.o $(DIST)/matrix.o $(DIST)/network.o
@@ -16,10 +15,10 @@ $(DIST):
 	mkdir -p $@
 
 $(DIST)/%.o: $(SOURCE)/%.c
-	$(CC) -g -c -o $@ $< $(FLAGS) $(LIBS)
+	$(CC) -g -c $(FLAGS) $(LIBS) $< -o $@
 
 $(TARGET): $(OBJECTS)
-	$(CC) -g -o $@ $^ $(FLAGS) $(LIBS)
+	$(CC) -g $(FLAGS) $(LIBS) $^ -o $@
 
 clean:
 	rm -rf *~ $(TARGET) $(DIST)
