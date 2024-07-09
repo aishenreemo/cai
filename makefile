@@ -6,10 +6,10 @@ DIST := ./dist
 FLAGS := -Wall -O0 -march=native
 LIBS := -lm
 
-OBJECTS := $(DIST)/main.o $(DIST)/matrix.o $(DIST)/network.o
-TARGET := cai
+OBJECTS := $(DIST)/matrix.o $(DIST)/network.o $(DIST)/history.o
+TARGETS := nn_train nn_video
 
-all: $(DIST) $(OBJECTS) $(TARGET)
+all: $(DIST) $(OBJECTS) $(DIST)/train.o $(DIST)/video.o $(TARGETS)
 
 $(DIST):
 	mkdir -p $@
@@ -17,10 +17,10 @@ $(DIST):
 $(DIST)/%.o: $(SOURCE)/%.c
 	$(CC) -g -c $(FLAGS) $(LIBS) $< -o $@
 
-$(TARGET): $(OBJECTS)
+nn_%: $(DIST)/%.o $(OBJECTS)
 	$(CC) -g $(FLAGS) $(LIBS) $^ -o $@
 
 clean:
-	rm -rf *~ $(TARGET) $(DIST)
+	rm -rf *~ $(TARGETS) $(DIST)
 
 .PHONY: clean

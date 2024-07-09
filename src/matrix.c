@@ -4,17 +4,20 @@
 
 #include "matrix.h"
 
-struct matrix_t matrix_new(int cols, int rows) {
+struct matrix_t matrix_new(integer_t cols, integer_t rows) {
 	struct matrix_t self;
 	self.cols = cols;
 	self.rows = rows;
 	self.stride = cols;
 
 	self.items = calloc(cols * rows, sizeof(decimal_t));
+
+	assert(self.items != NULL);
+
 	return self;
 }
 
-struct matrix_t matrix_from(decimal_t *items, int cols, int rows, int stride) {
+struct matrix_t matrix_from(decimal_t *items, integer_t cols, integer_t rows, integer_t stride) {
 	struct matrix_t matrix;
 
 	matrix.cols = cols;
@@ -51,10 +54,10 @@ void matrix_mul(
 	assert(product->rows == a->rows);
 	assert(product->cols == b->cols);
 
-	int length = product->rows * product->cols;
-	for (size_t i = 0; i < length; i++) {
-		int col = i % product->cols;
-		int row = i / product->cols;
+	integer_t length = product->rows * product->cols;
+	for (int i = 0; i < length; i++) {
+		integer_t col = i % product->cols;
+		integer_t row = i / product->cols;
 
 		MATRIX_AT(*product, col, row) = 0;
 		for (size_t k = 0; k < a->cols; k++) {

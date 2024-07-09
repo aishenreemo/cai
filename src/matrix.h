@@ -6,15 +6,22 @@
 typedef MATRIX_DECIMAL decimal_t;
 #endif
 
+#ifndef MATRIX_INTEGER
+#include <stdint.h>
+#define MATRIX_INTEGER uint32_t
+typedef MATRIX_INTEGER integer_t;
+#endif
+
+
 struct matrix_t {
-	int cols;
-	int rows;
-	int stride;
+	integer_t cols;
+	integer_t rows;
+	integer_t stride;
 	decimal_t *items;
 };
 
-struct matrix_t matrix_new(int cols, int rows);
-struct matrix_t matrix_from(decimal_t *items, int cols, int rows, int stride);
+struct matrix_t matrix_new(integer_t cols, integer_t rows);
+struct matrix_t matrix_from(decimal_t *items, integer_t cols, integer_t rows, integer_t stride);
 
 void matrix_rand(struct matrix_t *matrix);
 void matrix_fill(struct matrix_t *matrix, decimal_t value);
