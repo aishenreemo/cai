@@ -6,12 +6,9 @@
 
 struct matrix_t matrix_new(integer_t cols, integer_t rows) {
 	struct matrix_t self;
-	self.cols = cols;
-	self.rows = rows;
-	self.stride = cols;
 
+	matrix_set_size(&self, cols, rows);
 	self.items = calloc(cols * rows, sizeof(decimal_t));
-
 	assert(self.items != NULL);
 
 	return self;
@@ -20,12 +17,17 @@ struct matrix_t matrix_new(integer_t cols, integer_t rows) {
 struct matrix_t matrix_from(decimal_t *items, integer_t cols, integer_t rows, integer_t stride) {
 	struct matrix_t matrix;
 
-	matrix.cols = cols;
-	matrix.rows = rows;
+	matrix_set_size(&matrix, cols, rows);
 	matrix.stride = stride;
 	matrix.items = items;
 
 	return matrix;
+}
+
+void matrix_set_size(struct matrix_t *matrix, integer_t cols, integer_t rows) {
+	matrix->cols = cols;
+	matrix->rows = rows;
+	matrix->stride = cols;
 }
 
 void matrix_add(

@@ -1,63 +1,52 @@
 #include <assert.h>
-#include <stdint.h>
-#include <stdio.h>
-#include <sys/types.h>
+#include <unistd.h>
+#include <fcntl.h>
 
 #include "history.h"
 #include "matrix.h"
+#include "network.h"
 
-struct history_t history_new(char const *file_path, enum history_mode_t mode) {
+struct history_t history_new(char const *path, int flags) {
 	struct history_t self;
 
-	self.file = fopen(file_path, mode == HISTORY_WRITE ? "wb" : "rb");
-	self.mode = mode;
+	self.layer_count = 0;
+	self.neuron_count = 0;
+	self.size = 0;
 
-	assert(self.file != NULL);
+	self.file = open(path, flags, 0644);
+	assert(self.file != -1);
 
 	return self;
 }
 
-void history_add_token(struct history_t *history, enum history_token_t token) {
-	assert(history->mode == HISTORY_WRITE);
-	fwrite(&token, sizeof(uint8_t), 1, history->file);
+void history_write_cfg(struct history_t *history, struct network_t *network) {
+	history->layer_count = network->layer_count;
+	write(history->file, &history->layer_count, sizeof(integer_t));
+
+	for (int i = 0; i < history->layer_count; i++) {
+		struct matrix_t *layer = network->activations[NETWORK_ORIGINAL] + i;
+
+		integer_t layer_neuron_count = layer->cols;
+		write(history->file, &layer_neuron_count, sizeof(integer_t));
+
+		if (i + 1 == history->layer_count) continue;
+		integer_t next_layer_neuron_count = (layer + 1)->cols;
+		history->neuron_count += 
+			2 * layer_neuron_count * next_layer_neuron_count +
+			4 * layer_neuron_count;
+	}
+
+	fsync(history->file);
 }
 
-void history_add_int(struct history_t *history, integer_t integer) {
-	assert(history->mode == HISTORY_WRITE);
-	fwrite(&integer, sizeof(integer), 1, history->file);
-}
-
-void history_add_dec(struct history_t *history, decimal_t decimal) {
-	assert(history->mode == HISTORY_WRITE);
-	fwrite(&decimal, sizeof(decimal), 1, history->file);
-}
-
-enum history_token_t history_read_token(struct history_t *history) {
-	assert(history->mode == HISTORY_READ);
-
-	enum history_token_t token = HISTORY_SPACE;
-	fread(&token, sizeof(uint8_t), 1, history->file);
-
-	return token;
-}
-
-integer_t history_read_int(struct history_t *history) {
-	assert(history->mode == HISTORY_READ);
-
-	integer_t value;
-	fread(&value, sizeof(integer_t), 1, history->file);
-	return value;
-}
-
-decimal_t history_read_dec(struct history_t *history) {
-	assert(history->mode == HISTORY_READ);
-
-	decimal_t value;
-	fread(&value, sizeof(decimal_t), 1, history->file);
-	return value;
+void history_write_frame(struct history_t *history, struct network_t *network) {
+	for (int i = 0; i < history->neuron_count; i++) {
+		decimal_t value = network->buffer[i];
+		write(history->file, &value, sizeof(decimal_t));
+	}
+	fsync(history->file);
 }
 
 void history_close(struct history_t *history) {
-	fclose(history->file);
+	close(history->file);
 }
-

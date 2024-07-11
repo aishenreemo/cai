@@ -8,8 +8,30 @@
 #include <string.h>
 
 #include "network.h"
-#include "history.h"
 #include "matrix.h"
+
+static void network_alloc_matrices(struct network_t *network, integer_t layer_count) {
+	network->matrices = calloc(layer_count * 6 - 4, sizeof(struct matrix_t));
+	assert(network->matrices != NULL);
+
+	for (int i = NETWORK_ORIGINAL; i <= NETWORK_GRADIENT; i++) {
+		network->weights[i] = network->matrices + (i + 0) * (layer_count - 1);
+		network->biases[i] = network->matrices + (i + 2) * (layer_count - 1);
+		network->activations[i] = network->matrices + (i + 4) * (layer_count - 1);
+	}
+
+	network->activations[NETWORK_GRADIENT] += 1;
+}
+
+static void network_alloc_buffer(struct network_t *network, integer_t total_length) {
+	network->buffer = calloc(total_length, sizeof(decimal_t));
+	decimal_t *ptr = network->buffer + 0;
+	network->matrices[0].items = ptr;
+	for (int i = 1; i < network->layer_count * 6 - 4; i++) {
+		ptr += network->matrices[i - 1].cols * network->matrices[i - 1].rows;
+		network->matrices[i].items = ptr;
+	}
+}
 
 struct network_t network_new(integer_t layer_count, ...) {
 	assert(layer_count > 1);
@@ -20,91 +42,31 @@ struct network_t network_new(integer_t layer_count, ...) {
 	self.activation.function = activation_identity;
 	self.activation.derivative = activation_identity_derivative;
 
-	for (int i = 0; i < 2; i++) {
-		unsigned long sizeof_matrix = sizeof(struct matrix_t);
-
-		self.weights[i] = calloc(layer_count - 1, sizeof_matrix);
-		self.biases[i] = calloc(layer_count - 1, sizeof_matrix);
-		self.activations[i] = calloc(layer_count, sizeof_matrix);
-
-		assert(self.weights[i] != NULL);
-		assert(self.biases[i] != NULL);
-		assert(self.activations[i] != NULL);
-	}
+	network_alloc_matrices(&self, layer_count);
 
 	va_list args;
 	va_start(args, layer_count);
-	int input_count = va_arg(args, int);
+	integer_t total_length = 0;
+	integer_t input_count = va_arg(args, integer_t);
 
-	for (int i = 0; i < 2; i++) {
-		self.activations[i][0] = matrix_new(input_count, 1);
-	}
+	matrix_set_size(self.activations[NETWORK_ORIGINAL] + 0, input_count, 1);
+	matrix_set_size(self.activations[NETWORK_GRADIENT] + 0, input_count, 1);
 
 	for (int i = 0; i < layer_count - 1; i++) {
-		int neuron_count = va_arg(args, int);
+		integer_t neuron_count = va_arg(args, integer_t);
+		integer_t previous_neuron_count = self.activations[NETWORK_ORIGINAL][i].cols;
 
 		for (int j = 0; j < 2; j++) {
-			self.weights[j][i] = matrix_new(neuron_count, self.activations[j][i].cols);
-			self.biases[j][i] = matrix_new(neuron_count, 1);
-			self.activations[j][i + 1] = matrix_new(neuron_count, 1);
+			matrix_set_size(self.weights[j] + i, neuron_count, previous_neuron_count);
+			matrix_set_size(self.biases[j] + i, neuron_count, 1);
+			matrix_set_size(self.activations[j] + i + 1, neuron_count, 1);
+			total_length += neuron_count * previous_neuron_count + 2 * neuron_count;
 		}
 	}
+
+	network_alloc_buffer(&self, total_length);
 
 	va_end(args);
-
-	return self;
-}
-
-struct network_t network_from(struct history_t *history) {
-	struct network_t self;
-
-	memcpy(&self.history, history, sizeof(struct history_t));
-
-	enum history_token_t token = history_read_token(&self.history);
-
-	assert(token == HISTORY_LC);
-	self.layer_count = history_read_int(&self.history);
-
-	token = history_read_token(&self.history);
-	assert(token == HISTORY_A);
-
-	network_set_activation(&self, history_read_int(&self.history));
-
-	for (int i = 0; i < 2; i++) {
-		unsigned long sizeof_matrix = sizeof(struct matrix_t);
-
-		self.weights[i] = calloc(self.layer_count - 1, sizeof_matrix);
-		self.biases[i] = calloc(self.layer_count - 1, sizeof_matrix);
-		self.activations[i] = calloc(self.layer_count, sizeof_matrix);
-
-		assert(self.weights[i] != NULL);
-		assert(self.biases[i] != NULL);
-		assert(self.activations[i] != NULL);
-	}
-
-	token = history_read_token(&self.history);
-	assert(token == HISTORY_NC);
-	integer_t input_count = history_read_int(history);
-
-	for (int i = 0; i < 2; i++) {
-		self.activations[i][0] = matrix_new(input_count, 1);
-	}
-
-	for (int i = 0; i < self.layer_count - 1; i++) {
-		token = history_read_token(&self.history);
-		assert(token == HISTORY_NC);
-		integer_t neuron_count = history_read_int(history);
-
-		for (int j = 0; j < 2; j++) {
-			self.weights[j][i] = matrix_new(neuron_count, self.activations[j][i].cols);
-			self.biases[j][i] = matrix_new(neuron_count, 1);
-			self.activations[j][i + 1] = matrix_new(neuron_count, 1);
-		}
-
-	}
-
-	token = history_read_token(&self.history);
-	assert(token == HISTORY_N);
 
 	return self;
 }
@@ -179,7 +141,6 @@ void network_backpropagate(
 	struct matrix_t *input = activations + 0;
 	struct matrix_t *output = activations + (network->layer_count - 1);
 	struct matrix_t *outputg = activationsg + (network->layer_count - 1);
-
 
 	assert(input->cols == training_input->cols);
 	assert(output->cols == training_output->cols);
@@ -275,135 +236,41 @@ void network_learn(struct network_t *network, decimal_t learning_rate) {
 	}
 }
 
-void network_init_write_history(struct network_t *network) {
-	network->history = history_new("dist/sample.aiv", HISTORY_WRITE);
-
-	history_add_token(&network->history, HISTORY_LC);
-	history_add_int(&network->history, network->layer_count);
-	history_add_token(&network->history, HISTORY_A);
-	history_add_int(&network->history, network->activation.mode);
-
-	for (int i = 0; i < network->layer_count; i++) {
-		history_add_token(&network->history, HISTORY_NC);
-		history_add_int(&network->history, network->activations[NETWORK_ORIGINAL][i].cols);
-	}
-
-	history_add_token(&network->history, HISTORY_N);
-}
-
-void network_end_write_history(struct network_t *network) {
-	history_add_token(&network->history, HISTORY_EOF);
-}
-
-void network_write_frame(struct network_t *network) {
-	history_add_token(&network->history, HISTORY_SPACE);
-	for (int i = 0; i < network->layer_count - 1; i++) {
-		history_add_token(&network->history, HISTORY_W);
-
-		struct matrix_t *weights = network->weights[NETWORK_ORIGINAL] + i;
-		int weights_count = weights->cols * weights->rows;
-
-		for (int j = 0; j < weights_count; j++) {
-		 	history_add_dec(&network->history, weights->items[j]);
-
-			if (j == weights_count - 1) continue;
-			history_add_token(&network->history, HISTORY_COMMA);
-		}
-
-		history_add_token(&network->history, HISTORY_B);
-		struct matrix_t *biases = network->biases[NETWORK_ORIGINAL] + i;
-		for (int j = 0; j < biases->cols; j++) {
-		 	history_add_dec(&network->history, biases->items[j]);
-
-			if (j == biases->cols - 1) continue;
-			history_add_token(&network->history, HISTORY_COMMA);
-		}
-	}
-
-	history_add_token(&network->history, HISTORY_N);
-}
-
-void network_read_frame(struct network_t *network, enum history_token_t *token) {
-	for (int i = 0; i < network->layer_count - 1; i++) {
-		*token = history_read_token(&network->history);
-		assert(*token == HISTORY_W);
-
-		struct matrix_t *weights = network->weights[NETWORK_ORIGINAL] + i;
-		int weights_count = weights->cols * weights->rows;
-
-		for (int j = 0; j < weights_count; j++) {
-			weights->items[j] = history_read_dec(&network->history);
-
-			if (j == weights_count - 1) continue;
-			*token = history_read_token(&network->history);
-			assert(*token == HISTORY_COMMA);
-		}
-
-		*token = history_read_token(&network->history);
-		assert(*token == HISTORY_B);
-		struct matrix_t *biases = network->biases[NETWORK_ORIGINAL] + i;
-		for (int j = 0; j < biases->cols; j++) {
-			biases->items[j] = history_read_dec(&network->history);
-
-			if (j == biases->cols - 1) continue;
-			*token = history_read_token(&network->history);
-			assert(*token == HISTORY_COMMA);
-		}
-	}
-
-	*token = history_read_token(&network->history);
-	assert(*token == HISTORY_N);
-}
-
 void network_print(struct network_t *network) {
-	printf("NN -> LC: %d, NC: ", network->layer_count);
+	fprintf(stderr, "NN -> LC: %d, NC: ", network->layer_count);
 	for (int i = 0; i < network->layer_count; i++) {
-		printf("%d", network->activations[NETWORK_ORIGINAL][i].cols);
+		fprintf(stderr, "%d", network->activations[NETWORK_ORIGINAL][i].cols);
 		if (i == network->layer_count - 1) continue;
-		printf(", ");
+		fprintf(stderr, ", ");
 	}
 
-	printf("\n\t");
+	fprintf(stderr, "\n");
 	for (int i = 0; i < network->layer_count - 1; i++) {
-		printf("%d -> W: ", i);
+		fprintf(stderr, "\t%d -> W: ", i);
 		struct matrix_t *weights = network->weights[NETWORK_ORIGINAL] + i;
 		int weights_count = weights->cols * weights->rows;
 		for (int j = 0; j < weights_count; j++) {
-			printf("%lf", weights->items[j]);
+			fprintf(stderr, "%lf", weights->items[j]);
 
 			if (j == weights_count - 1) continue;
-			printf(", ");
+			fprintf(stderr, ", ");
 		}
 
-		printf(" B: ");
+		fprintf(stderr, " B: ");
 		struct matrix_t *biases = network->biases[NETWORK_ORIGINAL] + i;
 		for (int j = 0; j < biases->cols; j++) {
-			printf("%lf", biases->items[j]);
+			fprintf(stderr, "%lf", biases->items[j]);
 
 			if (j == biases->cols - 1) continue;
-			printf(", ");
+			fprintf(stderr, ", ");
 		}
-		printf("\n\t");
+		fprintf(stderr, "\n");
 	}
-	printf("\n");
 }
 
 void network_free(struct network_t *network) {
-	history_close(&network->history);
-
-	for (int i = 0; i < 2; i++) {
-		free(network->activations[i][0].items);
-
-		for (int j = 0; j < network->layer_count - 1; j++) {
-			free(network->weights[i][j].items);
-			free(network->biases[i][j].items);
-			free(network->activations[i][j + 1].items);
-		}
-
-		free(network->activations[i]);
-		free(network->weights[i]);
-		free(network->biases[i]);
-	}
+	free(network->matrices);
+	free(network->buffer);
 }
 
 decimal_t network_cost(

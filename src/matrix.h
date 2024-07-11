@@ -23,6 +23,8 @@ struct matrix_t {
 struct matrix_t matrix_new(integer_t cols, integer_t rows);
 struct matrix_t matrix_from(decimal_t *items, integer_t cols, integer_t rows, integer_t stride);
 
+void matrix_set_size(struct matrix_t *matrix, integer_t cols, integer_t rows);
+
 void matrix_rand(struct matrix_t *matrix);
 void matrix_fill(struct matrix_t *matrix, decimal_t value);
 
